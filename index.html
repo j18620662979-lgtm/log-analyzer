@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Log Analyzer☁️</title>
+  <style>
+/* ============ 颜色系统（GitHub Dark / VSCode Dark） ============ */
+:root{
+  --bg: #0D1117;          /* 页面背景 */
+  --card: #161B22;        /* 卡片背景 */
+  --border: #30363D;      /* 边框 */
+  --blue: #58A6FF;        /* 主色（蓝） */
+  --green: #3FB950;       /* 成功（绿） */
+  --orange: #D29922;      /* 警告（橙） */
+  --red: #F85149;         /* 错误（红） */
+  --purple: #D2A8FF;      /* 紫色 */
+  --pink: #F97583;        /* 粉色 */
+  --gray: #8B949E;        /* 灰色 */
+  --text: #C9D1D9;        /* 主文字 */
+  --radius: 8px;
+}
+*{ box-sizing: border-box; }
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Helvetica, Arial, sans-serif;
+  font-size:14px; line-height:1.6;
+}
+.container{ max-width: 980px; margin:0 auto; padding:24px 20px 40px; }
+code, .mono{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+
+/* ============ Header ============ */
+.header{ text-align:center; margin-bottom:24px; }
+.header h1{ margin:0; font-size:22px; color:#fff; letter-spacing:.5px; }
+.header .logo{ color:var(--blue); }
+.header .subtitle{ color:var(--gray); font-size:13px; margin-top:6px; }
+
+/* ============ 卡片通用 ============ */
+.card{
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px; margin-bottom:16px;
+}
+.section-title{ font-size:15px; font-weight:600; color:#fff; margin:0 0 14px; }
+
+/* ============ ① 测试场景 ============ */
+.scenario-tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+.scenario-tab{
+  background:transparent; color:var(--gray); border:1px solid var(--border);
+  border-radius:var(--radius); padding:8px 16px; cursor:pointer; font-size:14px;
+  transition:.15s;
+}
+.scenario-tab:hover{ color:var(--text); border-color:var(--blue); }
+.scenario-tab.active{ color:#fff; background:rgba(88,166,255,.15); border-color:var(--blue); }
+.scenario-desc{ color:var(--gray); font-size:13px; margin-top:10px; line-height:1.6; }
+
+/* ============ ② 上传区域（单输入框：拖拽 / 选择 / 粘贴） ============ */
+.upload-box{ position:relative; border-radius:var(--radius); transition:.15s; }
+.log-input{
+  width:100%; min-height:150px;
+  background:#0D1117; border:1.5px dashed var(--border); border-radius:var(--radius);
+  color:var(--text); padding:12px;
+  font-family:"SFMono-Regular", Consolas, Menlo, monospace; font-size:12.5px; resize:vertical;
+  transition:.15s;
+}
+.log-input:focus{ outline:none; border-color:var(--blue); border-style:solid; }
+.upload-box.dragover .log-input{ border-color:var(--blue); border-style:solid; background:rgba(88,166,255,.06); }
+.drop-hint{
+  position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+  background:rgba(13,17,23,.82); border:1.5px solid var(--blue); border-radius:var(--radius);
+  color:var(--blue); font-size:15px; font-weight:600; pointer-events:none;
+}
+.upload-box.dragover .drop-hint{ display:flex; }
+.dz-hint{ color:var(--gray); font-size:12px; margin-top:8px; }
+/* 文件信息条 */
+.file-info{
+  display:flex; align-items:center; gap:10px; margin-top:10px;
+  background:rgba(88,166,255,.08); border:1px solid var(--border); border-radius:var(--radius);
+  padding:8px 12px; font-size:13px;
+}
+.file-info .fi-icon{ font-size:16px; }
+.file-info .fi-name{ color:#fff; font-weight:600; word-break:break-all; }
+.file-info .fi-size{ color:var(--gray); font-size:12px; }
+.file-info .fi-del{
+  margin-left:auto; background:transparent; color:var(--gray);
+  border:1px solid var(--border); border-radius:6px; padding:3px 10px; cursor:pointer; font-size:12px;
+}
+.file-info .fi-del:hover{ color:var(--red); border-color:var(--red); }
+.action-bar{ display:flex; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap; }
+.btn{
+  background:var(--blue); color:#0D1117; border:none; border-radius:var(--radius);
+  padding:8px 20px; cursor:pointer; font-size:14px; font-weight:600; transition:.15s;
+}
+.btn:hover{ filter:brightness(1.1); }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+.btn-ghost{
+  background:transparent; color:var(--text); border:1px solid var(--border);
+  border-radius:var(--radius); padding:8px 16px; cursor:pointer; font-size:13px;
+}
+.btn-ghost:hover{ border-color:var(--blue); color:#fff; }
+.status{ color:var(--gray); font-size:13px; }
+
+/* ============ ③ 统计概览 ============ */
+.stats{ display:flex; flex-wrap:wrap; gap:10px; }
+.stat{
+  background:rgba(13,17,23,.55); border:1px solid var(--border); border-radius:var(--radius);
+  padding:12px 16px; min-width:120px; flex:1 1 140px;
+}
+.stat .s-label{ color:var(--gray); font-size:12.5px; }
+.stat .s-value{ color:#fff; font-size:22px; font-weight:700; margin-top:2px; line-height:1.2; }
+.stat .s-value small{ font-size:12px; color:var(--gray); font-weight:500; margin-left:3px; }
+
+/* 场景关键指标（复用统计卡片） */
+.charts{ margin-top:14px; display:flex; flex-direction:column; gap:14px; }
+.chart-block{ background:rgba(13,17,23,.45); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; }
+.chart-title{ color:#fff; font-size:13.5px; font-weight:600; margin-bottom:8px; }
+
+/* ============ ④ 异常分类（数量对比条形图） ============ */
+.type-chart{ display:flex; flex-direction:column; gap:9px; }
+.type-row{ display:flex; align-items:center; gap:10px; }
+.type-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.type-name{ width:130px; font-size:13px; color:var(--text); flex-shrink:0; }
+.type-bar-wrap{ flex:1; background:rgba(255,255,255,.05); border-radius:5px; height:22px; overflow:hidden; }
+.type-bar{
+  height:100%; border-radius:5px; min-width:24px;
+  display:flex; align-items:center; justify-content:flex-end;
+  transition:width .3s ease;
+}
+.type-bar-val{ color:#0D1117; font-size:12px; font-weight:700; padding:0 8px; white-space:nowrap; }
+.type-count{ width:96px; text-align:right; font-size:13px; color:var(--text); flex-shrink:0; }
+.type-count small{ color:var(--gray); font-size:11px; }
+
+/* ============ 筛选栏 ============ */
+.filter-bar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.filter-bar:empty{ display:none; }
+.fb-group{ display:flex; align-items:center; gap:6px; }
+.fb-group label{ color:var(--gray); font-size:12.5px; white-space:nowrap; }
+.fb-group select, .fb-search input{
+  background:#0D1117; color:var(--text); border:1px solid var(--border);
+  border-radius:6px; padding:6px 10px; font-size:13px; font-family:inherit;
+}
+.fb-group select:focus, .fb-search input:focus{ outline:none; border-color:var(--blue); }
+.fb-search{ flex:1 1 200px; min-width:160px; }
+.fb-search input{ width:100%; }
+.fb-reset{ padding:6px 12px !important; font-size:12.5px !important; }
+.fb-count{ color:var(--gray); font-size:12.5px; margin-left:auto; white-space:nowrap; }
+.fb-count b{ color:var(--blue); }
+
+/* ============ ⑤ 关键异常日志 ============ */
+.log-table{ width:100%; border-collapse:collapse; font-size:13px; }
+.log-table th, .log-table td{ border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+.log-table th{ background:rgba(88,166,255,.08); color:#fff; font-weight:600; }
+.log-table td.ln{ color:var(--gray); white-space:nowrap; width:64px; }
+.log-table td.time{ color:var(--gray); white-space:nowrap; width:150px; }
+.log-table td.tp{ white-space:nowrap; width:120px; }
+.log-table td.txt{
+  font-family:"SFMono-Regular", Consolas, Menlo, monospace; font-size:12.5px;
+  white-space:pre-wrap; word-break:break-all; color:#c9d1d9;
+}
+.tag{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.log-note{ color:var(--gray); font-size:12.5px; margin-top:8px; }
+
+/* ============ ⑥ 报告导出 ============ */
+.export-bar{ display:flex; gap:8px; flex-wrap:wrap; }
+.btn-export{
+  background:var(--blue); color:#0D1117; border:none; border-radius:var(--radius);
+  padding:8px 18px; cursor:pointer; font-size:13px; font-weight:600; transition:.15s;
+}
+.btn-export:hover{ filter:brightness(1.1); }
+
+/* ============ Footer / Toast ============ */
+.footer{ text-align:center; color:var(--gray); font-size:12px; padding:10px; }
+#toast{
+  position:fixed; left:50%; top:24px; transform:translateX(-50%);
+  background:var(--card); border:1px solid var(--border); color:var(--text);
+  padding:10px 18px; border-radius:var(--radius); font-size:13px; z-index:100;
+  opacity:0; transition:opacity .25s; pointer-events:none;
+}
+#toast.show{ opacity:1; }
+.empty{ color:var(--gray); text-align:center; padding:18px; }
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1><span class="logo">📊</span> Log Analyzer☁️</h1>
+      <div class="subtitle">面向 IoT 设备测试的轻量级日志分析网站</div>
+    </header>
+
+    <!-- ① 选择分析模式 -->
+    <section class="card">
+      <div class="section-title">① 选择分析模式</div>
+      <div class="scenario-tabs" id="scenarioTabs"></div>
+      <div class="scenario-desc" id="scenarioDesc"></div>
+    </section>
+
+    <!-- ② 上传日志 -->
+    <section class="card">
+      <div class="section-title">② 上传日志</div>
+      <div class="upload-box" id="uploadBox">
+        <textarea id="logInput" class="log-input" placeholder="拖拽日志文件到此处 · 点击「选择文件」· 或直接粘贴日志内容…"></textarea>
+        <div class="drop-hint" id="dropHint">松开鼠标即可载入日志文件</div>
+      </div>
+      <div class="file-info" id="fileInfo" style="display:none">
+        <span class="fi-icon">📄</span>
+        <span class="fi-name" id="fileName"></span>
+        <span class="fi-size" id="fileSize"></span>
+        <button type="button" class="fi-del" id="fileDel">✕ 取消</button>
+      </div>
+      <div class="dz-hint">支持 .log / .txt 等纯文本日志，文件不会上传，仅在本地处理</div>
+      <div class="action-bar">
+        <button type="button" class="btn-ghost" id="pickFileBtn">选择文件</button>
+        <button class="btn" id="analyzeBtn">开始分析</button>
+        <button class="btn-ghost" id="clearBtn">清空</button>
+        <span class="status" id="statusText"></span>
+      </div>
+    </section>
+
+    <!-- 结果区 -->
+    <div id="results" style="display:none">
+
+      <!-- ③ 统计概览 -->
+      <section class="card">
+        <div class="section-title">③ 统计概览</div>
+        <div class="stats" id="summary"></div>
+        <div class="charts" id="charts"></div>
+      </section>
+
+      <!-- ④ 异常分类 -->
+      <section class="card">
+        <div class="section-title">④ 异常分类</div>
+        <div id="anomalyTypes"></div>
+      </section>
+
+      <!-- ⑤ 关键异常日志 -->
+      <section class="card">
+        <div class="section-title">⑤ 关键异常日志</div>
+        <div class="filter-bar" id="filterBar"></div>
+        <div id="keyLogs"></div>
+      </section>
+
+      <!-- ⑥ 报告导出 -->
+      <section class="card">
+        <div class="section-title">⑥ 报告导出</div>
+        <div class="export-bar">
+          <button class="btn-export" id="copyMdBtn">📋 复制报告</button>
+          <button class="btn-export" id="downloadMdBtn">💾 下载报告</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="footer">本地运行 · 日志不离开浏览器 · 仅供测试辅助与问题复盘参考</div>
+  </div>
+
+  <div id="toast"></div>
+  <input type="file" id="fileInput" accept=".log,.txt,.text" style="display:none" />
+  <script>
+/* app.js (inlined) */
+/* =========================================================================
+ * Log Analyzer☁️ —— 面向 IoT 设备测试的轻量级日志分析工具
+ * 纯前端架构，无后端 / 数据库。核心能力：上传日志 → 选择分析模式 →
+ *   统计概览（日志总量 / INFO·WARNING·ERROR 数量 / 场景字段）→
+ *   异常分类 → 关键异常日志 → 报告导出。
+ * 定位：测试辅助与问题复盘，仅按日志内容进行简单分类与统计，
+ *       不做根因推断、故障链分析或自动定位。
+ * ========================================================================= */
+
+/* ============ 全局状态 ============ */
+const state = {
+  scenario: '通用日志分析', // 当前分析模式（仅作为统计规则选择）
+  lines: [],               // 解析后的原始日志行数组
+  stats: null,             // 统计结果
+  anomalies: [],           // 异常行列表 [{idx, level, typeId, typeLabel, color, time, text}]
+  filter: { type:'all', level:'all', keyword:'' } // 关键日志筛选条件
+};
+
+/* ============ 分析模式（仅统计规则选择，无复杂算法） ============ */
+const SCENARIOS = [
+  { id:'通用日志分析', desc:'通用日志的异常统计与分类，适合大多数日志的初步查看。' },
+  { id:'稳定性分析', desc:'关注崩溃、重启、看门狗等影响设备稳定性的异常。' },
+  { id:'网络分析',   desc:'关注 WiFi 断连、连接失败、超时、重连等网络相关异常。' },
+  { id:'OTA分析',    desc:'关注 OTA / 升级过程的上传、下载、成功与失败。' }
+];
+
+/* ============ 异常类型（按日志内容简单分类，互斥：每行至多一类） ============ */
+const ANOMALY_TYPES = [
+  { id:'crash',     label:'崩溃 Crash',     color:'#FF6B6B', re:/crash|fatal exception|sigsegv|段错误|abort|native crash/i },
+  { id:'anr',       label:'ANR',            color:'#FFA657', re:/anr|application not responding/i },
+  { id:'oom',       label:'内存不足 OOM',   color:'#D29922', re:/out of memory|oom|内存不足|low memory|内存泄露/i },
+  { id:'exception', label:'异常 Exception', color:'#D2A8FF', re:/exception|stack ?trace|stacktrace|throwable|nullpointer|空指针/i },
+  { id:'reboot',    label:'重启 Reboot',    color:'#58A6FF', re:/\breboot|\brestart|重启|watchdog/i },
+  { id:'network',   label:'网络异常',       color:'#3FB950', re:/network|wifi|mqtt|tcp|http|socket|连接失败|超时|断连|disconnect|timeout|网络/i },
+  { id:'warning',   label:'告警 Warning',   color:'#E3B341', re:/warning|warn/i },
+  { id:'error',     label:'错误 Error',     color:'#F85149', re:/error|err|失败|异常|failed|cannot|unable/i }
+];
+const TYPE_BY_ID = Object.fromEntries(ANOMALY_TYPES.map(t => [t.id, t]));
+
+/* ============ 通用工具函数 ============ */
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function clipStr(s, n){ s = String(s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function $(id){ return document.getElementById(id); }
+
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ============ 日志解析与识别 ============ */
+function parseLog(text){
+  return text.split(/\r\n|\r|\n/);
+}
+
+// 识别单行日志级别（真实级别，不重复计数）
+function detectLogLevel(line){
+  const m = line.match(/\b(VERBOSE|DEBUG|INFO|NOTICE|WARNING|WARN|ERROR|ERR|FATAL|CRASH)\b/i);
+  if(m){
+    const u = m[1].toUpperCase();
+    return u === 'WARN' ? 'WARNING' : u === 'ERR' ? 'ERROR' : u;
+  }
+  const a = line.match(/^([VDEWIF])\//);
+  if(a){
+    const map = { V:'VERBOSE', D:'DEBUG', E:'ERROR', W:'WARNING', I:'INFO', F:'FATAL' };
+    return map[a[1].toUpperCase()];
+  }
+  if(/kernel:/i.test(line)) return 'ERROR';
+  return null;
+}
+
+// 提取时间戳（用于异常时间分布）；返回 {text, hour} 或 null
+function extractTime(line){
+  let m;
+  if((m = line.match(/(\d{4}-\d{2}-\d{2}[ T](\d{2}):\d{2}:\d{2})/))) return { text:m[1], hour:+m[2] };
+  if((m = line.match(/([A-Z][a-z]{2}\s+\d{1,2}\s+(\d{2}):\d{2}:\d{2})/))) return { text:m[1], hour:+m[2] };
+  if((m = line.match(/\b(\d{1,2}):(\d{2}):(\d{2})\b/))) return { text:m[1] + ':' + m[2] + ':' + m[3], hour:+m[1] };
+  if((m = line.match(/(\d{13})/))){
+    const d = new Date(+m[1]);
+    if(!isNaN(d)) return { text: d.toISOString().slice(0, 19).replace('T', ' '), hour: d.getUTCHours() };
+  }
+  return null;
+}
+
+// 简单分类：按优先级取第一个匹配的异常类型（互斥）
+function classifyAnomaly(line){
+  for(const t of ANOMALY_TYPES){
+    if(t.re.test(line)) return t;
+  }
+  return null;
+}
+
+// 统计匹配某正则的行数
+function countLines(lines, re){
+  let n = 0;
+  for(const l of lines) if(re.test(l)) n++;
+  return n;
+}
+
+/* ============ 场景专属字段（简单关键词计数） ============ */
+function scenarioMetrics(scenario, lines){
+  const c = (re) => countLines(lines, re);
+  switch(scenario){
+    case '稳定性分析':
+      return [
+        { label:'崩溃次数', value: c(/crash|fatal exception|sigsegv|段错误|abort|native crash/i) },
+        { label:'重启次数', value: c(/\breboot|\brestart|重启|watchdog/i) },
+        { label:'看门狗异常', value: c(/watchdog/i) }
+      ];
+    case '网络分析':
+      return [
+        { label:'WiFi 断连', value: c(/wifi.*(断|down|disconnect|offline|丢失)|断网|网络断开|网络中断/i) },
+        { label:'连接失败', value: c(/连接失败|connection failed|connect.*fail|链接失败|握手失败/i) },
+        { label:'重连次数', value: c(/reconnect|重连|reconnected|重新连接/i) }
+      ];
+    case 'OTA分析':
+      return [
+        { label:'升级成功', value: c(/(ota|升级|upgrade|update).*(success|成功|完成|ok)/i) },
+        { label:'升级失败', value: c(/(ota|升级|upgrade|update).*(fail|失败|error)/i) }
+      ];
+    default:
+      return [];
+  }
+}
+
+/* ============ 主分析流程 ============ */
+async function runAnalysis(){
+  const text = $('logInput').value;
+  if(!text.trim()){ toast('请先上传或粘贴日志内容'); return; }
+  if(state.analyzing) return;
+  state.analyzing = true;
+  const btn = $('analyzeBtn');
+  const status = $('statusText');
+  btn.disabled = true;
+
+  try{
+    status.textContent = '解析日志…';
+    state.lines = parseLog(text);
+    await sleep(150);
+
+    status.textContent = '统计异常…';
+    const levelCounts = { INFO:0, WARNING:0, ERROR:0, DEBUG:0, VERBOSE:0, NOTICE:0, FATAL:0, OTHER:0 };
+    const typeCounts = {};
+    ANOMALY_TYPES.forEach(t => typeCounts[t.id] = 0);
+    const anomalies = [];
+
+    for(let i = 0; i < state.lines.length; i++){
+      const line = state.lines[i];
+      const lvl = detectLogLevel(line);
+      if(lvl && levelCounts.hasOwnProperty(lvl)) levelCounts[lvl]++;
+      else levelCounts.OTHER++;
+      const t = classifyAnomaly(line);
+      if(t){
+        typeCounts[t.id]++;
+        anomalies.push({
+          idx: i + 1,
+          level: lvl,
+          typeId: t.id,
+          typeLabel: t.label,
+          color: t.color,
+          time: extractTime(line),
+          text: line
+        });
+      }
+    }
+
+    state.stats = {
+      total: state.lines.length,
+      anomaly: anomalies.length,
+      levelCounts,
+      typeCounts
+    };
+    state.anomalies = anomalies;
+    state.filter = { type:'all', level:'all', keyword:'' }; // 每次分析重置筛选
+
+    await sleep(120);
+    status.textContent = '渲染结果…';
+    renderSummary();
+    renderAnomalyTypes();
+    renderFilterBar();
+    renderKeyLogs();
+
+    $('results').style.display = 'block';
+    status.textContent = '✅ 分析完成';
+    const resEl = $('results');
+    if(resEl && typeof resEl.scrollIntoView === 'function') resEl.scrollIntoView({ behavior:'smooth' });
+  }catch(err){
+    console.error('分析失败:', err);
+    status.textContent = '⚠️ 分析过程中出错，请重试';
+    toast('分析失败：' + (err && err.message ? err.message : err));
+  }finally{
+    state.analyzing = false;
+    btn.disabled = false;
+  }
+}
+
+/* ============ ③ 统计概览 ============ */
+function renderSummary(){
+  const box = $('summary');
+  const s = state.stats;
+  const lc = s.levelCounts;
+  let html = '';
+  html += statCard('日志总量', s.total + ' 行');
+  html += statCard('INFO 数量', lc.INFO);
+  html += statCard('WARNING 数量', lc.WARNING);
+  html += statCard('ERROR 数量', lc.ERROR);
+  html += statCard('异常行数', s.anomaly + ' 行');
+  box.innerHTML = html;
+
+  // 场景专属字段
+  const metrics = scenarioMetrics(state.scenario, state.lines);
+  let chartHtml = '';
+  if(metrics.length){
+    chartHtml += '<div class="chart-block"><div class="chart-title">' + escapeHtml(state.scenario) + ' · 关键指标</div><div class="stats">';
+    metrics.forEach(m => { chartHtml += statCard(m.label, m.value); });
+    chartHtml += '</div></div>';
+  }
+  $('charts').innerHTML = chartHtml;
+}
+function statCard(label, value){
+  return '<div class="stat"><div class="s-label">' + escapeHtml(label) + '</div>'
+    + '<div class="s-value">' + escapeHtml(String(value)) + '</div></div>';
+}
+
+/* ============ ④ 异常分类（数量对比条形图） ============ */
+function renderAnomalyTypes(){
+  const box = $('anomalyTypes');
+  const tc = state.stats.typeCounts;
+  const total = state.anomalies.length;
+  const rows = ANOMALY_TYPES.filter(t => tc[t.id] > 0);
+  if(rows.length === 0){ box.innerHTML = '<div class="empty">未发现异常行。</div>'; return; }
+  rows.sort((a, b) => tc[b.id] - tc[a.id]);
+  // 条宽按最大值缩放，保证数据充分可见（占比另行标注）
+  const max = Math.max.apply(null, rows.map(t => tc[t.id]));
+  let html = '<div class="type-chart">';
+  rows.forEach(t => {
+    const n = tc[t.id];
+    const pct = total > 0 ? Math.round(n / total * 100) : 0;
+    const barW = Math.max(6, Math.round(n / max * 100));
+    html += '<div class="type-row">'
+      + '<span class="type-dot" style="background:' + t.color + '"></span>'
+      + '<span class="type-name">' + escapeHtml(t.label) + '</span>'
+      + '<span class="type-bar-wrap">'
+      +   '<span class="type-bar" style="width:' + barW + '%;background:' + t.color + '">'
+      +     '<span class="type-bar-val">' + n + '</span>'
+      +   '</span>'
+      + '</span>'
+      + '<span class="type-count">' + n + ' 条 <small>(' + pct + '%)</small></span>'
+      + '</div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+/* ============ 筛选栏（快速定位/过滤异常日志） ============ */
+function renderFilterBar(){
+  const box = $('filterBar');
+  if(!box) return;
+  if(state.anomalies.length === 0){ box.innerHTML = ''; return; }
+  const tc = state.stats.typeCounts;
+  const types = ANOMALY_TYPES.filter(t => tc[t.id] > 0);
+  const levelOrder = ['ERROR','FATAL','WARNING','INFO','NOTICE','DEBUG','VERBOSE','OTHER'];
+  const levels = levelOrder.filter(l => state.anomalies.some(a => (a.level || 'OTHER') === l));
+
+  let html = '';
+  html += '<div class="fb-group"><label>类型</label><select id="fType"><option value="all">全部类型</option>';
+  types.forEach(t => { html += '<option value="' + t.id + '">' + escapeHtml(t.label) + '（' + tc[t.id] + '）</option>'; });
+  html += '</select></div>';
+
+  html += '<div class="fb-group"><label>级别</label><select id="fLevel"><option value="all">全部级别</option>';
+  levels.forEach(l => { html += '<option value="' + l + '">' + l + '</option>'; });
+  html += '</select></div>';
+
+  html += '<div class="fb-group fb-search"><input id="fKeyword" type="text" placeholder="🔍 按关键字过滤日志内容…" /></div>';
+  html += '<button type="button" class="btn-ghost fb-reset" id="fReset">重置</button>';
+  html += '<div class="fb-count" id="fCount"></div>';
+  box.innerHTML = html;
+
+  $('fType').value = state.filter.type;
+  $('fLevel').value = state.filter.level;
+  $('fKeyword').value = state.filter.keyword;
+
+  $('fType').addEventListener('change', e => { state.filter.type = e.target.value; renderKeyLogs(); });
+  $('fLevel').addEventListener('change', e => { state.filter.level = e.target.value; renderKeyLogs(); });
+  $('fKeyword').addEventListener('input', e => { state.filter.keyword = e.target.value; renderKeyLogs(); });
+  $('fReset').addEventListener('click', () => {
+    state.filter = { type:'all', level:'all', keyword:'' };
+    $('fType').value = 'all'; $('fLevel').value = 'all'; $('fKeyword').value = '';
+    renderKeyLogs();
+  });
+}
+
+function getFilteredAnomalies(){
+  const f = state.filter;
+  const kw = f.keyword.trim().toLowerCase();
+  return state.anomalies.filter(a => {
+    if(f.type !== 'all' && a.typeId !== f.type) return false;
+    if(f.level !== 'all' && (a.level || 'OTHER') !== f.level) return false;
+    if(kw && a.text.toLowerCase().indexOf(kw) === -1) return false;
+    return true;
+  });
+}
+
+/* ============ ⑤ 关键异常日志 ============ */
+function renderKeyLogs(){
+  const box = $('keyLogs');
+  const total = state.anomalies.length;
+  if(total === 0){ box.innerHTML = '<div class="empty">未发现异常行。</div>'; return; }
+
+  const list = getFilteredAnomalies();
+  const filtered = (state.filter.type !== 'all' || state.filter.level !== 'all' || state.filter.keyword.trim() !== '');
+  const cntEl = $('fCount');
+  if(cntEl){
+    cntEl.innerHTML = filtered
+      ? '匹配 <b>' + list.length + '</b> / 共 ' + total + ' 条'
+      : '共 <b>' + total + '</b> 条异常';
+  }
+
+  if(list.length === 0){ box.innerHTML = '<div class="empty">没有符合筛选条件的异常日志。</div>'; return; }
+
+  const MAX = 300;
+  const shown = list.slice(0, MAX);
+  let html = '<table class="log-table"><thead><tr>'
+    + '<th>位置(行)</th><th>时间</th><th>类型</th><th>日志内容</th></tr></thead><tbody>';
+  shown.forEach(a => {
+    const time = a.time ? escapeHtml(a.time.text) : '—';
+    html += '<tr>'
+      + '<td class="ln">#' + a.idx + '</td>'
+      + '<td class="time">' + time + '</td>'
+      + '<td class="tp"><span class="tag" style="background:' + a.color + '22;color:' + a.color + '">' + escapeHtml(a.typeLabel) + '</span></td>'
+      + '<td class="txt">' + escapeHtml(a.text) + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  if(list.length > MAX){
+    html += '<div class="log-note">仅展示前 ' + MAX + ' 条，符合条件共 ' + list.length + ' 条。可进一步用筛选条件缩小范围。</div>';
+  }
+  box.innerHTML = html;
+}
+
+/* ============ ⑥ 报告导出 ============ */
+function buildMarkdown(){
+  const s = state.stats;
+  if(!s) return '';
+  const lc = s.levelCounts;
+  let md = '# IoT 日志辅助统计报告\n\n';
+  md += '> 本报告由日志辅助统计工具生成，仅按日志内容进行简单分类与统计，'
+      + '用于测试辅助与问题复盘参考，不构成根因结论。\n\n';
+  md += '## 分析模式\n' + state.scenario + '\n\n';
+  md += '## 日志总量\n' + s.total + ' 行\n\n';
+  md += '## 级别统计\n';
+  md += '- INFO：' + lc.INFO + '\n';
+  md += '- WARNING：' + lc.WARNING + '\n';
+  md += '- ERROR：' + lc.ERROR + '\n';
+  md += '- 其他/未标注：' + lc.OTHER + '\n\n';
+  md += '## 异常类型统计（共 ' + s.anomaly + ' 行）\n';
+  ANOMALY_TYPES.filter(t => s.typeCounts[t.id] > 0).forEach(t => {
+    md += '- ' + t.label + '：' + s.typeCounts[t.id] + '\n';
+  });
+  if(s.typeCounts && Object.values(s.typeCounts).every(v => v === 0)) md += '- 无\n';
+  md += '\n';
+
+  md += '## 关键异常日志\n';
+  state.anomalies.slice(0, 200).forEach(a => {
+    const t = a.time ? a.time.text : '';
+    md += '- 行 ' + a.idx + (t ? ' (' + t + ')' : '') + ' [' + a.typeLabel + '] ' + a.text.trim() + '\n';
+  });
+  if(state.anomalies.length > 200){
+    md += '（仅展示前 200 条，共 ' + state.anomalies.length + ' 条）\n';
+  }
+  return md;
+}
+
+function copyMarkdown(){
+  const md = buildMarkdown();
+  if(!md){ toast('请先完成分析'); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(md).then(() => toast('报告已复制到剪贴板')).catch(() => fallbackCopy(md));
+  } else {
+    fallbackCopy(md);
+  }
+}
+function fallbackCopy(md){
+  const ta = document.createElement('textarea');
+  ta.value = md; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('报告已复制到剪贴板'); }
+  catch(e){ toast('复制失败，请手动选择'); }
+  document.body.removeChild(ta);
+}
+function downloadMarkdown(){
+  const md = buildMarkdown();
+  if(!md){ toast('请先完成分析'); return; }
+  const blob = new Blob([md], { type:'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'log-stat-report.md';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('报告已下载');
+}
+
+/* ============ 场景切换 ============ */
+function renderScenarioTabs(){
+  const box = $('scenarioTabs');
+  box.innerHTML = SCENARIOS.map(sc =>
+    '<button type="button" class="scenario-tab' + (sc.id === state.scenario ? ' active' : '') + '" data-scenario="' + escapeHtml(sc.id) + '">'
+    + escapeHtml(sc.id) + '</button>'
+  ).join('');
+  box.querySelectorAll('.scenario-tab').forEach(b => {
+    b.addEventListener('click', () => setScenario(b.dataset.scenario));
+  });
+  updateScenarioDesc();
+}
+function updateScenarioDesc(){
+  const sc = SCENARIOS.find(s => s.id === state.scenario);
+  $('scenarioDesc').textContent = sc ? sc.desc : '';
+}
+function setScenario(id){
+  if(!SCENARIOS.some(s => s.id === id)) return;
+  state.scenario = id;
+  document.querySelectorAll('.scenario-tab').forEach(b => b.classList.toggle('active', b.dataset.scenario === id));
+  updateScenarioDesc();
+  // 若已分析过，则按新场景重新统计字段（不重新解析日志）
+  if(state.stats){
+    renderSummary();
+    toast('已切换分析模式：' + id);
+  }
+}
+
+/* ============ 文件处理 ============ */
+function formatSize(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+function showFileInfo(file){
+  $('fileName').textContent = file.name;
+  $('fileSize').textContent = formatSize(file.size);
+  $('fileInfo').style.display = 'flex';
+}
+function clearFileInfo(){
+  $('fileInfo').style.display = 'none';
+  $('fileName').textContent = '';
+  $('fileSize').textContent = '';
+}
+function handleFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    $('logInput').value = e.target.result || '';
+    showFileInfo(file);
+    toast('已读取文件：' + file.name);
+  };
+  reader.onerror = () => toast('文件读取失败');
+  reader.readAsText(file);
+}
+
+function clearAll(){
+  $('logInput').value = '';
+  clearFileInfo();
+  state.lines = []; state.stats = null; state.anomalies = [];
+  state.filter = { type:'all', level:'all', keyword:'' };
+  $('results').style.display = 'none';
+  $('statusText').textContent = '';
+  toast('已清空');
+}
+
+/* ============ 初始化与事件绑定 ============ */
+function init(){
+  try{
+    renderScenarioTabs();
+
+    // 上传区：textarea 即拖拽区，支持拖拽 / 选择 / 粘贴
+    const uploadBox = $('uploadBox');
+    ['dragenter','dragover'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.add('dragover'); }));
+    ['dragleave','dragend'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.remove('dragover'); }));
+    uploadBox.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadBox.classList.remove('dragover');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f) handleFile(f);
+    });
+
+    const fileInput = $('fileInput');
+    $('pickFileBtn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); fileInput.value = ''; });
+    $('fileDel').addEventListener('click', () => { $('logInput').value = ''; clearFileInfo(); toast('已取消文件'); });
+    // 手动清空输入框时同步隐藏文件信息
+    $('logInput').addEventListener('input', () => { if($('logInput').value === '') clearFileInfo(); });
+
+    $('analyzeBtn').addEventListener('click', runAnalysis);
+    $('clearBtn').addEventListener('click', clearAll);
+    $('copyMdBtn').addEventListener('click', copyMarkdown);
+    $('downloadMdBtn').addEventListener('click', downloadMarkdown);
+  }catch(err){
+    console.error('init 初始化出错：', err);
+  }
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+}else{
+  init();
+}
+
+</script>
+</body>
+</html>
